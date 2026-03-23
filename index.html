@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GPS Esquí - El Tarter</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        
+        .panel-control {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(44, 62, 80, 0.95);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            width: 280px;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+        }
+
+        button {
+            background-color: #2ecc71;
+            color: white;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        button:hover { background-color: #27ae60; }
+        
+        .info-ruta {
+            margin-top: 15px;
+            font-size: 0.9em;
+            border-top: 1px solid #555;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="panel-control">
+    <h3 style="margin-top:0">Navegador El Tarter</h3>
+	
+<div id="debug-log" style="position:fixed; bottom:0; width:100%; background:black; color:lime; z-index:9999; font-size:10px; max-height:100px; overflow:auto;"></div>
+    
+
+
+
+    <label>Mi Nivel:</label>
+    <select id="nivelUsuario" onchange="actualizarMapa()">
+        <option value="todos">Todos los niveles</option>
+        <option value="principiante">Principiante (Azul/Verde)</option>
+        <option value="experto">Experto (Roja/Negra)</option>
+    </select>
+
+    <label style="display:block; margin-top:15px;">Ir a:</label>
+    <select id="destinoFinal">
+        <option value="">Selecciona destino...</option>
+        <option value="Rossinyol">Riba Escorjada (Rossinyol)</option>
+        <option value="Guineu">Base Llosada (Guineu)</option>
+        <option value="Miquel">Cruce Tosa (Miquel)</option>
+    </select>
+
+    <button onclick="guiarUsuario()">INICIAR RUTA</button>
+<button onclick="iniciarRastreoReal()" style="background-color: #3498db; margin-top: 5px;">
+    ACTIVAR GPS REAL 🛰️
+</button>
+<button onclick="detenerRastreo()" style="background-color: #e74c3c; margin-top: 5px;">
+    DETENER GPS
+</button>
+
+    <div id="instrucciones" class="info-ruta">
+        Selecciona un destino para ver las indicaciones.
+    </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // --- 1. Inicialización del Mapa ---
+    var map = L.map('map').setView([42.5488, 1.6468], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    // --- 2. Base de Datos de Pistas ---
+    const pistas = [
+        { nombre: "Guineu", dificultad: "principiante", color: "blue", puntos: [[42.548828861471144, 1.6468384443034219], [42.55229855492738, 1.6435712420878075], [42.55422935551139, 1.6401437617690782],[42.555272806270004, 1.6392916225694572],[42.558309824129914, 1.6415200170090485],[42.5616031741174, 1.6430451479506731],[42.56691253962238, 1.6419734080610928]] },
+        { nombre: "Llop", dificultad: "experto", color: "red", puntos: [[42.548828861471144, 1.6468384443034219], [42.55088750224694, 1.6480523424315807], [42.55498392202144, 1.6470736926092229],[42.556811206655944, 1.6453049894557896],[42.55739237885794, 1.6446980748347417],[42.55802942676338, 1.6440759873453357],[42.55976171714284, 1.6433780355293983]] },
+        { nombre: "Rossinyol", dificultad: "principiante", color: "blue", puntos: [[42.552583480764206, 1.628271173688972], 
+	[42.549705695834916, 1.6237422100854384],[42.54749908262807, 1.6212882696587085],[42.54655526639669, 1.6202688017661169],[42.54587065837546, 1.616145820975436],[42.54736615160169, 1.616479629050506],	[42.54808397561856, 1.6171743107197596],
+	[42.548941365712125, 1.6169938739265342],
+	[42.549240452531784, 1.6159383186771552],
+[42.55011776552649, 1.6148556978939033],
+[42.549586062153224, 1.6143955840610211],
+[42.55117451256019, 1.6134573127284997],
+[42.55161315700685, 1.6135655748068252],
+[42.553028761269765, 1.6133670943331755]
+] },
+        { nombre: "Miquel", dificultad: "experto", color: "red", puntos: [[42.548828861471144, 1.6468384443034219], 
+	[42.552582852526974, 1.649645896940499],
+	[42.554009043309634, 1.649343782534733],
+	[42.55684529552601, 1.6484677981783662],
+	[42.5581966823395, 1.6459143351878294],
+	[42.558694554338494, 1.6454637240814074],
+	[42.560978392319285, 1.643500347066532]] }
+    ];
+
+    var capasPistas = [];
+    var capaRutaActiva = null;
+
+    // --- 3. Función: Actualizar Visualización General ---
+    function actualizarMapa() {
+        capasPistas.forEach(capa => map.removeLayer(capa));
+        capasPistas = [];
+
+        var nivel = document.getElementById('nivelUsuario').value;
+
+        pistas.forEach(pista => {
+            if (nivel === "todos" || nivel === pista.dificultad) {
+                var poly = L.polyline(pista.puntos, {
+                    color: pista.color,
+                    weight: 4,
+                    opacity: 0.6
+                }).addTo(map);
+                capasPistas.push(poly);
+            }
+        });
+    }
+
+    // --- 4. Función: Motor del GPS (Guiar Usuario) ---
+    function guiarUsuario() {
+        const destino = document.getElementById('destinoFinal').value;
+        const panelInstrucciones = document.getElementById('instrucciones');
+
+        if (!destino) return;
+
+        // Limpiar ruta previa
+        if (capaRutaActiva) map.removeLayer(capaRutaActiva);
+
+        // Buscar la pista en nuestra "BD"
+        const pistaSeleccionada = pistas.find(p => p.nombre === destino);
+
+        if (pistaSeleccionada) {
+            // Dibujar ruta resaltada
+            capaRutaActiva = L.polyline(pistaSeleccionada.puntos, {
+                color: '#2ecc71',
+                weight: 10,
+                opacity: 1,
+                dashArray: '10, 15'
+            }).addTo(map);
+
+            // Zoom a la ruta
+            map.fitBounds(capaRutaActiva.getBounds(), { padding: [50, 50] });
+
+            // Actualizar texto de instrucciones
+            panelInstrucciones.innerHTML = `
+                <strong>Ruta Activa:</strong> ${pistaSeleccionada.nombre}<br>
+                <strong>Dificultad:</strong> ${pistaSeleccionada.dificultad.toUpperCase()}<br>
+                <em>Sigue la línea discontinua verde.</em>
+            `;
+		setTimeout(() => {
+				if(confirm("quieres simular el descenso por " + pistaSeleccionada.nombre + "?")){
+					simularDescenso(pistaSeleccionada.puntos);}},500);
+        }
+	
+    }
+
+    // Marcador de posición actual (Simulado)
+    L.marker([42.5488, 1.6468]).addTo(map)
+        .bindPopup("<b>Tu ubicación</b><br>Cima Telecabina Tarter")
+        .openPopup();
+
+    // Carga inicial
+    actualizarMapa();
+
+
+var marcadorUsuario = L.marker([42.5488 , 1.6468]).addTo(map).bindPopup("Tu Ubicaciobn");
+
+function simularDescenso(puntos) {
+	let i = 0;
+//intervalo de movimiento( cada 800ms se mueve al siguiente punto)
+const animacion = setInterval(() => {
+if (i < puntos.length) {
+//movemos el marcador a la siguiente coordena
+marcadorUsuario.setLatLng(puntos[i]);
+//centramos el mapa suavemente en la nueva posicion
+map.panTo(puntos[i]);
+i++;
+} else {
+clearInterval(animacion);
+alert("¡has llegado al final de la pista!");
+}
+}, 800);
+}
+
+
+var idRastreo = null;
+
+function iniciarRastreoReal() {
+    if (!navigator.geolocation) {
+        alert("Tu navegador no soporta GPS.");
+        return;
+    }
+
+    // Opciones para máxima precisión
+    const opcionesGps = {
+        enableHighAccuracy: true, // Fuerza el uso del chip GPS (gasta más batería pero es vital en montaña)
+        timeout: 5000,
+        maximumAge: 0
+    };
+
+    // Empezamos a escuchar la posición
+    idRastreo = navigator.geolocation.watchPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const nuevaPos = [lat, lng];
+
+        // 1. Movemos el marcador al punto real
+        marcadorUsuario.setLatLng(nuevaPos);
+
+        // 2. Centramos el mapa en el usuario
+        map.flyTo(nuevaPos, 16); 
+
+        // 3. Lógica de "Fuera de Pista" (Opcional)
+        verificarDesvio(nuevaPos);
+
+    }, error => {
+        console.warn("Error de GPS: " + error.message);
+    }, opcionesGps);
+navigator.geolocation.watchPosition(
+    pos => log("GPS OK: " + pos.coords.latitude),
+    err => log("ERROR GPS: " + err.message), 
+    opcionesGps
+);
+}
+
+
+
+
+function verificarDesvio(posActual) {
+    const destino = document.getElementById('destinoFinal').value;
+    if (!destino) return;
+
+    const datosPista = pistas.find(p => p.nombre === destino);
+    
+    // Calculamos la distancia al punto más cercano de la pista
+    // (Simplificado: comprobamos el primer punto de la pista como ejemplo)
+    const puntoPista = L.latLng(datosPista.puntos[0]);
+    const miPos = L.latLng(posActual);
+    
+    const distancia = miPos.distanceTo(puntoPista); // Distancia en metros
+
+    if (distancia > 30) { // Si te alejas más de 30 metros
+        document.getElementById('instrucciones').innerHTML = 
+            "<span style='color: #e74c3c;'>⚠️ ¡TE HAS DESVIADO! Vuelve a la pista " + destino + "</span>";
+    }
+}
+
+
+function detenerRastreo() {
+    if (idRastreo) {
+        navigator.geolocation.clearWatch(idRastreo);
+        alert("GPS desactivado.");
+    }
+}
+
+
+
+
+function log(msg) {
+    const div = document.getElementById('debug-log');
+    div.innerHTML += "<br>> " + msg;
+}
+
+// Úsala dentro de tu función de GPS para ver qué falla:
+
+
+
+
+</script>
+
+</body>
+</html>
