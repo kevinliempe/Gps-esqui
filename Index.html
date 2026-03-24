@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Esquí - El Tarter</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="panel-control">
+        <h3 style="margin-top:0">Navegador El Tarter</h3>
+        
+        <label>Mi Nivel:</label>
+        <select id="nivelUsuario">
+            <option value="todos">Todos los niveles</option>
+            <option value="principiante">Principiante (Azul/Verde)</option>
+            <option value="experto">Experto (Roja/Negra)</option>
+        </select>
+
+        <label style="display:block; margin-top:15px;">Ir a:</label>
+        <select id="destinoFinal">
+            <option value="">Selecciona destino...</option>
+            <option value="Rossinyol">Riba Escorjada (Rossinyol)</option>
+            <option value="Guineu">Base Llosada (Guineu)</option>
+            <option value="Miquel">Cruce Tosa (Miquel)</option>
+        </select>
+
+        <button id="btnIniciarRuta">INICIAR RUTA</button>
+        <button id="btnActivarGps" style="background-color: #3498db; margin-top: 5px;">
+            ACTIVAR GPS REAL 🛰️
+        </button>
+        <button id="btnDetenerGps" style="background-color: #e74c3c; margin-top: 5px;">
+            DETENER GPS
+        </button>
+
+        
+</div>
+
+    <div id="map"></div>
+    <div id="debug-log"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
